@@ -3,7 +3,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 const kRed = Color(0xFFE53935);
 const kRedDark = Color(0xFFB71C1C);
-const kRedLight = Color(0xFFFFEBEE);
 
 class PersonalInfoPage extends StatefulWidget {
   const PersonalInfoPage({super.key});
@@ -14,15 +13,13 @@ class PersonalInfoPage extends StatefulWidget {
 
 class _PersonalInfoPageState extends State<PersonalInfoPage> {
   final _supabase = Supabase.instance.client;
-  final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _emailCtrl = TextEditingController();
-  final _studentIdCtrl = TextEditingController();
-  final _deptCtrl = TextEditingController();
-  String _avatarInitials = '??';
+
+  String _name = '';
+  String _email = '';
+  String _studentId = '';
+  String _department = '';
+  String _avatarInitials = '?';
   bool _isLoading = true;
-  bool _isSaving = false;
-  bool _isEditing = false;
 
   @override
   void initState() {
@@ -30,103 +27,57 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
     _loadUserData();
   }
 
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _emailCtrl.dispose();
-    _studentIdCtrl.dispose();
-    _deptCtrl.dispose();
-    super.dispose();
-  }
-
+  // Fetch user data from Supabase and update all fields atomically
   Future<void> _loadUserData() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+
       final data = await _supabase
           .from('users')
           .select('name, email, student_id, department')
           .eq('id', userId)
           .single();
-      _nameCtrl.text = data['name'] ?? '';
-      _emailCtrl.text = data['email'] ?? '';
-      _studentIdCtrl.text = data['student_id'] ?? '';
-      _deptCtrl.text = data['department'] ?? '';
-      final name = data['name'] ?? '';
-      _avatarInitials = name.isNotEmpty
-          ? name
-                .trim()
-                .split(' ')
-                .where((w) => w.isNotEmpty)
-                .take(2)
-                .map((w) => w[0].toUpperCase())
-                .join()
-          : '??';
+
+      final name = (data['name'] ?? '') as String;
+
+      if (mounted) {
+        setState(() {
+          _name = name;
+          _email = (data['email'] ?? '') as String;
+          _studentId = (data['student_id'] ?? '') as String;
+          _department = (data['department'] ?? '') as String;
+          _avatarInitials = name.trim().isNotEmpty
+              ? name
+                    .trim()
+                    .split(' ')
+                    .where((w) => w.isNotEmpty)
+                    .take(2)
+                    .map((w) => w[0].toUpperCase())
+                    .join()
+              : '?';
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
-        _showSnack('Data load error: $e', isError: true);
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to load data: $e'),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ),
+        );
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  Future<void> _saveChanges() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    setState(() => _isSaving = true);
-
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
-
-      final newEmail = _emailCtrl.text.trim();
-      final currentEmail = _supabase.auth.currentUser?.email ?? '';
-      await _supabase
-          .from('users')
-          .update({
-            'name': _nameCtrl.text.trim(),
-            'student_id': _studentIdCtrl.text.trim(),
-            'department': _deptCtrl.text.trim(),
-            'email': newEmail,
-          })
-          .eq('id', userId);
-      if (newEmail != currentEmail) {
-        await _supabase.auth.updateUser(UserAttributes(email: newEmail));
-      }
-      final name = _nameCtrl.text.trim();
-      setState(() {
-        _avatarInitials = name.isNotEmpty
-            ? name
-                  .trim()
-                  .split(' ')
-                  .where((w) => w.isNotEmpty)
-                  .take(2)
-                  .map((w) => w[0].toUpperCase())
-                  .join()
-            : '??';
-        _isEditing = false;
-      });
-
-      _showSnack('Profile successfully updated ✓');
-    } catch (e) {
-      _showSnack('Save error: $e', isError: true);
-    } finally {
-      if (mounted) setState(() => _isSaving = false);
-    }
-  }
-
-  void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: isError ? Colors.red.shade700 : kRedDark,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   @override
@@ -142,18 +93,32 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
-                    child: Form(
-                      key: _formKey,
-                      child: Column(
-                        children: [
-                          _buildAvatar(),
-                          const SizedBox(height: 20),
-                          _buildInfoCard(),
-                          const SizedBox(height: 20),
-                          _buildActionButton(),
-                          const SizedBox(height: 30),
-                        ],
-                      ),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 8),
+                        _buildAvatar(),
+                        const SizedBox(height: 12),
+                        Text(
+                          _name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1A1A1A),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _department,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF888888),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        _buildInfoCard(),
+                        const SizedBox(height: 30),
+                      ],
                     ),
                   ),
                 ),
@@ -164,9 +129,9 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
 
   Widget _buildAppBar() {
     return SliverAppBar(
-      expandedHeight: 120,
       pinned: true,
       backgroundColor: kRed,
+      expandedHeight: 110,
       leading: GestureDetector(
         onTap: () => Navigator.pop(context),
         child: Container(
@@ -182,46 +147,6 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
           ),
         ),
       ),
-      actions: [
-        if (!_isEditing)
-          GestureDetector(
-            onTap: () => setState(() => _isEditing = true),
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.edit_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-          ),
-        if (_isEditing)
-          GestureDetector(
-            onTap: () {
-              setState(() => _isEditing = false);
-              _loadUserData();
-            },
-            child: Container(
-              margin: const EdgeInsets.all(8),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.close_rounded,
-                color: Colors.white,
-                size: 18,
-              ),
-            ),
-          ),
-        const SizedBox(width: 4),
-      ],
       flexibleSpace: FlexibleSpaceBar(
         title: const Text(
           'Personal Info',
@@ -291,65 +216,47 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       ),
       child: Column(
         children: [
-          _buildEditableField(
+          _buildInfoRow(
             icon: Icons.person_outline_rounded,
             label: 'Full Name',
-            controller: _nameCtrl,
+            value: _name,
             isFirst: true,
-            validator: (v) =>
-                (v == null || v.trim().isEmpty) ? 'Enter name' : null,
           ),
           _buildDivider(),
-          _buildEditableField(
+          _buildInfoRow(
             icon: Icons.badge_outlined,
             label: 'Student ID',
-            controller: _studentIdCtrl,
-            keyboardType: TextInputType.text,
-            validator: (v) => null,
+            value: _studentId,
           ),
           _buildDivider(),
-          _buildEditableField(
+          _buildInfoRow(
             icon: Icons.email_outlined,
             label: 'Email',
-            controller: _emailCtrl,
-            keyboardType: TextInputType.emailAddress,
-            validator: (v) {
-              if (v == null || v.trim().isEmpty) return 'Enter email';
-              if (!v.contains('@')) return 'Enter valid email';
-              return null;
-            },
+            value: _email,
           ),
           _buildDivider(),
-          _buildEditableField(
+          _buildInfoRow(
             icon: Icons.school_outlined,
             label: 'Department',
-            controller: _deptCtrl,
+            value: _department,
             isLast: true,
-            validator: (v) => null,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildEditableField({
+  // Read-only info row displaying label and value
+  Widget _buildInfoRow({
     required IconData icon,
     required String label,
-    required TextEditingController controller,
+    required String value,
     bool isFirst = false,
     bool isLast = false,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
   }) {
     return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: _isEditing ? 10 : 16,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: _isEditing
-            ? kRedLight.withValues(alpha: 0.4)
-            : Colors.transparent,
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(isFirst ? 25 : 0),
           topRight: Radius.circular(isFirst ? 25 : 0),
@@ -363,67 +270,37 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: _isEditing ? kRedLight : const Color(0xFFF5F5F5),
+              color: const Color(0xFFF5F5F5),
               borderRadius: BorderRadius.circular(11),
             ),
-            child: Icon(
-              icon,
-              color: _isEditing ? kRed : const Color(0xFFAAAAAA),
-              size: 18,
-            ),
+            child: Icon(icon, color: const Color(0xFFAAAAAA), size: 18),
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: _isEditing
-                ? TextFormField(
-                    controller: controller,
-                    keyboardType: keyboardType,
-                    validator: validator,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1A1A1A),
-                    ),
-                    decoration: InputDecoration(
-                      labelText: label,
-                      labelStyle: const TextStyle(
-                        fontSize: 11,
-                        color: kRed,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  )
-                : Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        label,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFF999999),
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        controller.text.isEmpty ? '—' : controller.text,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF1A1A1A),
-                        ),
-                      ),
-                    ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF999999),
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
                   ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value.isEmpty ? '—' : value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                ),
+              ],
+            ),
           ),
-          if (_isEditing)
-            const Icon(Icons.edit_outlined, color: kRed, size: 16)
-          else
-            const SizedBox(width: 16),
         ],
       ),
     );
@@ -436,65 +313,6 @@ class _PersonalInfoPageState extends State<PersonalInfoPage> {
       color: Color(0xFFF5F5F5),
       indent: 20,
       endIndent: 20,
-    );
-  }
-
-  Widget _buildActionButton() {
-    return GestureDetector(
-      onTap: _isSaving
-          ? null
-          : _isEditing
-          ? _saveChanges
-          : () => setState(() => _isEditing = true),
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 15),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [kRed, kRedDark],
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: kRed.withValues(alpha: 0.35),
-              blurRadius: 12,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Center(
-          child: _isSaving
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2.5,
-                  ),
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      _isEditing ? Icons.check_rounded : Icons.edit_rounded,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isEditing ? 'Save Changes' : 'Edit Profile',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-        ),
-      ),
     );
   }
 }

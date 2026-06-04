@@ -23,8 +23,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String _email = '';
   String _department = '';
   String _studentId = '';
-  String _avatarInitials = '??';
-
+  String _avatarInitials = '?';
   bool _isLoading = true;
 
   @override
@@ -33,10 +32,14 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadUserData();
   }
 
+  // Fetch user profile data from Supabase
   Future<void> _loadUserData() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
+      if (userId == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       final data = await _supabase
           .from('users')
@@ -44,27 +47,33 @@ class _ProfilePageState extends State<ProfilePage> {
           .eq('id', userId)
           .single();
 
-      _name = data['name'] ?? '';
-      _email = data['email'] ?? '';
-      _department = data['department'] ?? '';
-      _studentId = data['student_id'] ?? '';
+      final name = (data['name'] ?? '') as String;
 
-      _avatarInitials = _name.isNotEmpty
-          ? _name
-                .trim()
-                .split(' ')
-                .where((w) => w.isNotEmpty)
-                .take(2)
-                .map((w) => w[0].toUpperCase())
-                .join()
-          : '??';
+      if (mounted) {
+        setState(() {
+          _name = name;
+          _email = (data['email'] ?? '') as String;
+          _department = (data['department'] ?? '') as String;
+          _studentId = (data['student_id'] ?? '') as String;
+          _avatarInitials = name.trim().isNotEmpty
+              ? name
+                    .trim()
+                    .split(' ')
+                    .where((w) => w.isNotEmpty)
+                    .take(2)
+                    .map((w) => w[0].toUpperCase())
+                    .join()
+              : '?';
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       debugPrint('Profile data load error: $e');
-    } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // Show logout confirmation dialog
   Future<void> _confirmLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -157,7 +166,6 @@ class _ProfilePageState extends State<ProfilePage> {
       padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 20),
       child: Column(
         children: [
-          // Avatar circle
           Container(
             width: 80,
             height: 80,
@@ -184,8 +192,6 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           const SizedBox(height: 12),
-
-          // Name
           Text(
             _name.isEmpty ? 'Loading...' : _name,
             style: const TextStyle(
@@ -195,15 +201,11 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
           ),
           const SizedBox(height: 3),
-
-          // Email
           Text(
             _email,
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           const SizedBox(height: 8),
-
-          // Department + Student ID badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
             decoration: BoxDecoration(
@@ -237,30 +239,6 @@ class _ProfilePageState extends State<ProfilePage> {
           context,
           MaterialPageRoute(builder: (_) => const PersonalInfoPage()),
         ).then((_) => _loadUserData()),
-      },
-      {
-        'icon': Icons.collections_bookmark_outlined,
-        'title': 'My Borrows',
-        'sub': 'Active borrowed books',
-        'color': const Color(0xFF1E88E5),
-        'onTap': () => Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const MyLibraryPage(fromProfile: true),
-          ),
-        ),
-      },
-      {
-        'icon': Icons.history_rounded,
-        'title': 'Reading History',
-        'sub': 'All past borrowed books',
-        'color': const Color(0xFF43A047),
-        'onTap': () => Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const MyLibraryPage(fromProfile: true),
-          ),
-        ),
       },
       {
         'icon': Icons.notifications_outlined,

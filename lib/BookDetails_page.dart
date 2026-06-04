@@ -578,14 +578,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                     Expanded(
                       child: _actionBtn('Borrow', filled: true, onTap: _borrow),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _actionBtn(
-                        'Reserve',
-                        filled: false,
-                        onTap: _reserve,
-                      ),
-                    ),
                   ] else ...[
                     Expanded(
                       child: _actionBtn(

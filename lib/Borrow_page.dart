@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:project_1/BookDetails_page.dart'; // ✅ NEW
+import 'package:project_1/BookDetails_page.dart';
 
 const kRed = Color(0xFFE53935);
 const kRedLight = Color(0xFFFFEBEE);
@@ -66,15 +66,34 @@ class _BorrowPageState extends State<BorrowPage> {
     }
   }
 
+  // Calculate fine by comparing date only, no UTC needed for Bangladesh
   double _calcFine(Map<String, dynamic> borrow) {
     if (borrow['due_date'] == null) return 0;
     final due = DateTime.parse(borrow['due_date']);
-    final now = DateTime.now();
-    if (now.isAfter(due)) {
-      final days = now.difference(due).inDays;
+    final nowDate = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+    final dueDate = DateTime(due.year, due.month, due.day);
+    if (nowDate.isAfter(dueDate)) {
+      final days = nowDate.difference(dueDate).inDays;
       return days * 5.0;
     }
     return 0;
+  }
+
+  // Check overdue by comparing date only, no UTC needed
+  bool _isOverdue(Map<String, dynamic> borrow) {
+    if (borrow['due_date'] == null) return false;
+    final due = DateTime.parse(borrow['due_date']);
+    final nowDate = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+    final dueDate = DateTime(due.year, due.month, due.day);
+    return nowDate.isAfter(dueDate);
   }
 
   Future<void> _requestRenew(Map<String, dynamic> borrow) async {
@@ -83,7 +102,7 @@ class _BorrowPageState extends State<BorrowPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Maximum 2 renewals allowed!'),
-          backgroundColor: Colors.red,
+          backgroundColor: kRed,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -132,7 +151,7 @@ class _BorrowPageState extends State<BorrowPage> {
           content: const Text(
             'Return request sent! Waiting for admin approval.',
           ),
-          backgroundColor: const Color(0xFF1565C0),
+          backgroundColor: const Color(0xFF2E7D32),
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -148,7 +167,11 @@ class _BorrowPageState extends State<BorrowPage> {
     }
   }
 
-  Map<String, dynamic> _statusInfo(String status) {
+  // Returns badge info; shows Overdue if due date passed even if DB status is active
+  Map<String, dynamic> _statusInfo(String status, bool overdue) {
+    if (overdue && status == 'active') {
+      return {'label': 'Overdue', 'color': kRed, 'bg': kRedLight};
+    }
     switch (status) {
       case 'pending':
         return {
@@ -163,23 +186,11 @@ class _BorrowPageState extends State<BorrowPage> {
           'bg': const Color(0xFFE8F5E9),
         };
       case 'overdue':
-        return {
-          'label': 'Overdue',
-          'color': Colors.red,
-          'bg': const Color(0xFFFFEBEE),
-        };
+        return {'label': 'Overdue', 'color': kRed, 'bg': kRedLight};
       case 'return_requested':
-        return {
-          'label': 'Return Requested',
-          'color': const Color(0xFF1565C0),
-          'bg': const Color(0xFFE3F2FD),
-        };
+        return {'label': 'Return Requested', 'color': kRed, 'bg': kRedLight};
       case 'renew_requested':
-        return {
-          'label': 'Renew Requested',
-          'color': const Color(0xFF6A1B9A),
-          'bg': const Color(0xFFF3E5F5),
-        };
+        return {'label': 'Renew Requested', 'color': kRed, 'bg': kRedLight};
       default:
         return {
           'label': status,
@@ -236,8 +247,9 @@ class _BorrowPageState extends State<BorrowPage> {
           final title = book['title'] ?? 'Unknown';
           final author = book['author'] ?? '';
           final status = borrow['status'] ?? 'pending';
-          final statusInfo = _statusInfo(status);
           final fine = _calcFine(borrow);
+          final overdue = _isOverdue(borrow);
+          final statusInfo = _statusInfo(status, overdue);
           final renewCount = borrow['renew_count'] ?? 0;
           final gradient = _gradients[i % _gradients.length];
 
@@ -247,12 +259,16 @@ class _BorrowPageState extends State<BorrowPage> {
             dueText = 'Due: ${due.day} ${_month(due.month)} ${due.year}';
           }
 
+          final cardBorderColor = overdue && status == 'active'
+              ? const Color(0xFFEF9A9A)
+              : const Color(0xFFEEEEEE);
+
           return Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: const Color(0xFFF9F9F9),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFEEEEEE)),
+              border: Border.all(color: cardBorderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,7 +340,7 @@ class _BorrowPageState extends State<BorrowPage> {
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: (statusInfo['color'] as Color)
-                                      .withOpacity(0.3),
+                                      .withValues(alpha: 0.3),
                                 ),
                               ),
                               child: Text(
@@ -341,9 +357,14 @@ class _BorrowPageState extends State<BorrowPage> {
                             if (dueText.isNotEmpty)
                               Text(
                                 dueText,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: Color(0xFF888888),
+                                  color: overdue && status == 'active'
+                                      ? kRed
+                                      : const Color(0xFF888888),
+                                  fontWeight: overdue && status == 'active'
+                                      ? FontWeight.w600
+                                      : FontWeight.normal,
                                 ),
                               ),
 
@@ -362,7 +383,7 @@ class _BorrowPageState extends State<BorrowPage> {
                   ],
                 ),
 
-                // Fine display
+                // Fine box shown when fine is greater than zero
                 if (fine > 0) ...[
                   const SizedBox(height: 10),
                   Container(
@@ -372,7 +393,7 @@ class _BorrowPageState extends State<BorrowPage> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFEBEE),
+                      color: kRedLight,
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: const Color(0xFFEF9A9A)),
                     ),
@@ -385,7 +406,7 @@ class _BorrowPageState extends State<BorrowPage> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Fine: ৳${fine.toStringAsFixed(0)}',
+                          'Fine: ${fine.toStringAsFixed(0)} taka',
                           style: const TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -394,7 +415,7 @@ class _BorrowPageState extends State<BorrowPage> {
                         ),
                         const SizedBox(width: 4),
                         const Text(
-                          '(৳5/day overdue)',
+                          '(5 taka/day overdue)',
                           style: TextStyle(fontSize: 11, color: Colors.grey),
                         ),
                       ],
@@ -404,7 +425,7 @@ class _BorrowPageState extends State<BorrowPage> {
 
                 const SizedBox(height: 12),
 
-                // Action buttons
+                // Action buttons based on status
                 if (status == 'active' || status == 'overdue') ...[
                   Row(
                     children: [
@@ -413,11 +434,9 @@ class _BorrowPageState extends State<BorrowPage> {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: renewCount >= 2
                                 ? Colors.grey
-                                : const Color(0xFF6A1B9A),
+                                : kRed,
                             side: BorderSide(
-                              color: renewCount >= 2
-                                  ? Colors.grey
-                                  : const Color(0xFF6A1B9A),
+                              color: renewCount >= 2 ? Colors.grey : kRed,
                               width: 1.5,
                             ),
                             shape: RoundedRectangleBorder(

@@ -51,15 +51,47 @@ class _ActiveBorrowsPageState extends State<ActiveBorrowsPage> {
   String _dueDays(String? dueStr) {
     if (dueStr == null) return '';
     final due = DateTime.parse(dueStr);
-    final diff = due.difference(DateTime.now()).inDays;
-    if (diff < 0) return '${diff.abs()} Days overdue';
+    final nowDate = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+    final dueDate = DateTime(due.year, due.month, due.day);
+    final diff = dueDate.difference(nowDate).inDays;
+    if (nowDate.isAfter(dueDate))
+      return '${nowDate.difference(dueDate).inDays} days overdue';
     if (diff == 0) return 'Due today';
-    return '$diff Remaining days';
+    return '$diff remaining days';
   }
 
+  // Check overdue by date only, no UTC needed for Bangladesh
   bool _isOverdue(String? dueStr) {
     if (dueStr == null) return false;
-    return DateTime.now().isAfter(DateTime.parse(dueStr));
+    final due = DateTime.parse(dueStr);
+    final nowDate = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+    final dueDate = DateTime(due.year, due.month, due.day);
+    return nowDate.isAfter(dueDate);
+  }
+
+  // Calculate fine by date difference, 5 taka per day
+  double _calcFine(String? dueStr) {
+    if (dueStr == null) return 0;
+    final due = DateTime.parse(dueStr);
+    final nowDate = DateTime(
+      DateTime.now().year,
+      DateTime.now().month,
+      DateTime.now().day,
+    );
+    final dueDate = DateTime(due.year, due.month, due.day);
+    if (nowDate.isAfter(dueDate)) {
+      final days = nowDate.difference(dueDate).inDays;
+      return days * 5.0;
+    }
+    return 0;
   }
 
   @override
@@ -156,19 +188,19 @@ class _ActiveBorrowsPageState extends State<ActiveBorrowsPage> {
 
   Widget _buildCard(Map<String, dynamic> b) {
     final overdue = _isOverdue(b['due_date']);
+    final fine = _calcFine(b['due_date']);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-
         border: overdue
             ? const Border(left: BorderSide(color: kRed, width: 4))
             : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -178,6 +210,7 @@ class _ActiveBorrowsPageState extends State<ActiveBorrowsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // User info row
           Row(
             children: [
               Container(
@@ -212,7 +245,6 @@ class _ActiveBorrowsPageState extends State<ActiveBorrowsPage> {
                   ],
                 ),
               ),
-
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
@@ -233,6 +265,7 @@ class _ActiveBorrowsPageState extends State<ActiveBorrowsPage> {
 
           const Divider(height: 20),
 
+          // Book info
           Row(
             children: [
               const Icon(Icons.menu_book_rounded, size: 16, color: kRed),
@@ -258,6 +291,7 @@ class _ActiveBorrowsPageState extends State<ActiveBorrowsPage> {
 
           const SizedBox(height: 10),
 
+          // Borrow and due date row
           Row(
             children: [
               Expanded(
@@ -310,6 +344,38 @@ class _ActiveBorrowsPageState extends State<ActiveBorrowsPage> {
               fontWeight: FontWeight.w500,
             ),
           ),
+
+          // Fine display only — no toggle, admin handles payment in return requests page
+          if (fine > 0) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: kRedLight,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFEF9A9A)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.warning_amber_rounded,
+                    color: kRed,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Fine: ${fine.toStringAsFixed(0)} taka (5 taka/day)',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: kRed,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
