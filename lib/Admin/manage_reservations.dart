@@ -23,16 +23,26 @@ class _ManageReservationsState extends State<ManageReservations> {
     _fetchReservations();
   }
 
+  // Fetch pending + ready reservations, auto-expire outdated ones
   Future<void> _fetchReservations() async {
     setState(() => _isLoading = true);
     try {
+      // Auto-expire pending reservations whose expires_at has passed
+      await _supabase
+          .from('reservations')
+          .update({'status': 'expired'})
+          .eq('status', 'pending')
+          .lt('expires_at', DateTime.now().toIso8601String());
+
+      // Fetch pending and ready reservations
       final res = await _supabase
           .from('reservations')
           .select(
             '*, users(name, student_id), books(title, author, available_copies)',
           )
-          .eq('status', 'active')
+          .inFilter('status', ['pending', 'ready'])
           .order('reserved_at', ascending: false);
+
       setState(() {
         _reservations = List<Map<String, dynamic>>.from(res);
         _isLoading = false;
@@ -43,19 +53,21 @@ class _ManageReservationsState extends State<ManageReservations> {
     }
   }
 
+  // Mark reservation as ready when copies are available
   Future<void> _markReady(String id) async {
     try {
       await _supabase
           .from('reservations')
           .update({'status': 'ready'})
           .eq('id', id);
-      _showSuccess('Status set to ready');
+      _showSuccess('Marked as ready');
       _fetchReservations();
     } catch (e) {
       _showError('Unable to mark as ready');
     }
   }
 
+  // Cancel a reservation after confirmation
   Future<void> _cancelReservation(String id) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -93,21 +105,18 @@ class _ManageReservationsState extends State<ManageReservations> {
           .from('reservations')
           .update({'status': 'cancelled'})
           .eq('id', id);
-      _showSuccess('Reservation cancelled.');
+      _showSuccess('Reservation cancelled');
       _fetchReservations();
     } catch (e) {
       _showError('Unable to cancel reservation');
     }
   }
 
-  String _fmtStr(String? s) {
+  String _fmtDate(String? s) {
     if (s == null) return '-';
     final d = DateTime.parse(s);
     return '${d.day}/${d.month}/${d.year}';
   }
-
-  bool _isExpired(String? s) =>
-      s != null && DateTime.now().isAfter(DateTime.parse(s));
 
   void _showSuccess(String msg) {
     if (!mounted) return;
@@ -195,7 +204,7 @@ class _ManageReservationsState extends State<ManageReservations> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '${_reservations.length} active',
+                          '${_reservations.length} total',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
@@ -222,7 +231,7 @@ class _ManageReservationsState extends State<ManageReservations> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'No active reservation found',
+                      'No reservations found',
                       style: TextStyle(color: Colors.grey[500], fontSize: 15),
                     ),
                   ],
@@ -244,18 +253,20 @@ class _ManageReservationsState extends State<ManageReservations> {
   Widget _buildCard(Map<String, dynamic> r) {
     final user = r['users'] as Map<String, dynamic>?;
     final book = r['books'] as Map<String, dynamic>?;
-    final expired = _isExpired(r['expires_at']);
     final copies = (book?['available_copies'] as int?) ?? 0;
+    final isReady = r['status'] == 'ready';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: expired ? Border.all(color: kRed.withOpacity(0.3)) : null,
+        border: isReady
+            ? Border.all(color: const Color(0xFF2E7D32).withValues(alpha: 0.4))
+            : null,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.06),
+            color: Colors.black.withValues(alpha: 0.06),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -265,7 +276,7 @@ class _ManageReservationsState extends State<ManageReservations> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // User info
+          // User info row with status badge
           Row(
             children: [
               Container(
@@ -300,29 +311,34 @@ class _ManageReservationsState extends State<ManageReservations> {
                   ],
                 ),
               ),
-              if (expired)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: kRedLight,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Expired',
-                    style: TextStyle(
-                      color: kRed,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
+              // Status badge
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: isReady
+                      ? const Color(0xFF2E7D32).withValues(alpha: 0.1)
+                      : Colors.orange.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isReady ? 'Ready' : 'Waiting',
+                  style: TextStyle(
+                    color: isReady
+                        ? const Color(0xFF2E7D32)
+                        : Colors.orange[800],
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
             ],
           ),
           const Divider(height: 20),
 
+          // Book info
           Row(
             children: [
               const Icon(Icons.menu_book_rounded, size: 16, color: kRed),
@@ -347,6 +363,7 @@ class _ManageReservationsState extends State<ManageReservations> {
           ),
           const SizedBox(height: 10),
 
+          // Dates and available copies
           Row(
             children: [
               Expanded(
@@ -358,7 +375,7 @@ class _ManageReservationsState extends State<ManageReservations> {
                       style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                     ),
                     Text(
-                      _fmtStr(r['reserved_at']),
+                      _fmtDate(r['reserved_at']),
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -376,11 +393,10 @@ class _ManageReservationsState extends State<ManageReservations> {
                       style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                     ),
                     Text(
-                      _fmtStr(r['expires_at']),
-                      style: TextStyle(
+                      _fmtDate(r['expires_at']),
+                      style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: expired ? kRed : null,
                       ),
                     ),
                   ],
@@ -406,6 +422,8 @@ class _ManageReservationsState extends State<ManageReservations> {
             ],
           ),
           const SizedBox(height: 14),
+
+          // Action buttons
           Row(
             children: [
               Expanded(
@@ -425,9 +443,12 @@ class _ManageReservationsState extends State<ManageReservations> {
               const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: copies > 0 ? () => _markReady(r['id']) : null,
+                  // Enabled only when copies available and not already ready
+                  onPressed: copies > 0 && !isReady
+                      ? () => _markReady(r['id'])
+                      : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6A1B9A),
+                    backgroundColor: const Color(0xFF2E7D32),
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: Colors.grey[200],
                     shape: RoundedRectangleBorder(
@@ -436,9 +457,9 @@ class _ManageReservationsState extends State<ManageReservations> {
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     elevation: 0,
                   ),
-                  child: const Text(
-                    'Mark Ready',
-                    style: TextStyle(fontSize: 13),
+                  child: Text(
+                    isReady ? 'Already Ready' : 'Mark Ready',
+                    style: const TextStyle(fontSize: 13),
                   ),
                 ),
               ),

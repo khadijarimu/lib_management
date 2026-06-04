@@ -37,7 +37,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
   bool _isReserved = false;
   bool _isWishlisted = false;
   bool _wishlistLoading = false;
-
   String? _borrowStatus;
 
   @override
@@ -73,6 +72,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
               'renew_requested',
             ])
             .maybeSingle();
+
         final reserve = await _supabase
             .from('reservations')
             .select()
@@ -80,6 +80,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
             .eq('book_id', widget.bookId)
             .inFilter('status', ['pending', 'ready'])
             .maybeSingle();
+
         final wishlist = await _supabase
             .from('wishlists')
             .select()
@@ -181,19 +182,16 @@ class _BookDetailPageState extends State<BookDetailPage> {
             .delete()
             .eq('user_id', userId)
             .eq('book_id', widget.bookId);
-
         if (mounted) {
           setState(() => _isWishlisted = false);
           _snack('Removed from wishlist', const Color(0xFF555555));
         }
       } else {
-        // Add to wishlist
         await _supabase.from('wishlists').insert({
           'user_id': userId,
           'book_id': widget.bookId,
           'added_at': DateTime.now().toIso8601String(),
         });
-
         if (mounted) {
           setState(() => _isWishlisted = true);
           _snack('Added to wishlist!', kRed);
@@ -374,7 +372,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                       padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                       child: Column(
                         children: [
-                          // Book cover
                           Container(
                             width: 130,
                             height: 185,
@@ -387,7 +384,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: c1.withOpacity(0.35),
+                                  color: c1.withValues(alpha: 0.35),
                                   blurRadius: 20,
                                   offset: const Offset(0, 10),
                                 ),
@@ -405,7 +402,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                                   )
                                 : _coverFallback(book['title']),
                           ),
-
                           const SizedBox(height: 10),
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -450,7 +446,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                               ],
                             ),
                           ),
-
                           const SizedBox(height: 18),
                           Text(
                             book['title'] ?? 'Unknown Title',
@@ -544,7 +539,6 @@ class _BookDetailPageState extends State<BookDetailPage> {
                           ],
                         ),
                       ),
-
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -559,7 +553,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
           border: const Border(top: BorderSide(color: Color(0xFFEEEEEE))),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 10,
               offset: const Offset(0, -2),
             ),
@@ -579,19 +573,28 @@ class _BookDetailPageState extends State<BookDetailPage> {
               })
             : Row(
                 children: [
+                  // Show Borrow + Reserve when copies available, only Reserve when unavailable
                   if (available) ...[
                     Expanded(
                       child: _actionBtn('Borrow', filled: true, onTap: _borrow),
                     ),
                     const SizedBox(width: 10),
-                  ],
-                  Expanded(
-                    child: _actionBtn(
-                      'Reserve',
-                      filled: false,
-                      onTap: _reserve,
+                    Expanded(
+                      child: _actionBtn(
+                        'Reserve',
+                        filled: false,
+                        onTap: _reserve,
+                      ),
                     ),
-                  ),
+                  ] else ...[
+                    Expanded(
+                      child: _actionBtn(
+                        'Reserve',
+                        filled: true,
+                        onTap: _reserve,
+                      ),
+                    ),
+                  ],
                 ],
               ),
       ),
@@ -676,6 +679,7 @@ class _BookDetailPageState extends State<BookDetailPage> {
       ),
     ),
   );
+
   Widget _statusBar(Map<String, dynamic> info) => Container(
     height: 50,
     decoration: BoxDecoration(
