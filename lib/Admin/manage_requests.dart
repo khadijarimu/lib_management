@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:project_1/Admin/active_borrows_page.dart';
+import 'package:project_1/Admin/admin_history_page.dart';
 import 'package:project_1/Admin/borrow_requests_page.dart';
 import 'package:project_1/Admin/renew_requests_page.dart';
 import 'package:project_1/Admin/return_requests_page.dart';
@@ -201,9 +202,71 @@ class _ManageRequestsState extends State<ManageRequests> {
                         _fetchCounts();
                       },
                     ),
+                    const SizedBox(height: 12),
+
+                    // History card - navigates to full borrow history log
+                    _buildHistoryCard(),
                   ],
                 ),
               ),
+      ),
+    );
+  }
+
+  // History card has no count badge since it shows all records, not pending only
+  Widget _buildHistoryCard() {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AdminHistoryPage()),
+        );
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: kRedLight,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.history, color: kRed, size: 26),
+            ),
+            const SizedBox(width: 14),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Borrow History',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'All records: returned, rejected, overdue, renewed',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey[400]),
+          ],
+        ),
       ),
     );
   }
@@ -226,7 +289,7 @@ class _ManageRequestsState extends State<ManageRequests> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.06),
+              color: Colors.black.withValues(alpha: 0.06),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -275,7 +338,7 @@ class _ManageRequestsState extends State<ManageRequests> {
                   ),
                   decoration: BoxDecoration(
                     color: count > 0
-                        ? countColor.withOpacity(0.12)
+                        ? countColor.withValues(alpha: 0.12)
                         : Colors.grey[100],
                     borderRadius: BorderRadius.circular(20),
                   ),
