@@ -1,62 +1,41 @@
 import 'package:flutter/material.dart';
-import 'package:project_1/Admin/admin_dashboard.dart';
-import 'package:project_1/Auth/Register_page.dart';
-import 'package:project_1/Auth/forgot_password_page.dart';
-import 'package:project_1/Home_page.dart';
 import 'package:project_1/widgets/input_field.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const kRed = Color(0xFFE53935);
 const kRedDark = Color(0xFFB71C1C);
 
-class LoginPage extends StatefulWidget {
-  const LoginPage({super.key});
+class ForgotPasswordPage extends StatefulWidget {
+  const ForgotPasswordPage({super.key});
 
   @override
-  State<LoginPage> createState() => _LoginPageState();
+  State<ForgotPasswordPage> createState() => _ForgotPasswordPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _supabase = Supabase.instance.client;
   bool _isLoading = false;
+  bool _emailSent = false;
 
-  Future<void> _login() async {
+  Future<void> _sendResetEmail() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
-      final response = await _supabase.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-      if (response.user == null) return;
-      final userData = await _supabase
-          .from('users')
-          .select('role')
-          .eq('id', response.user!.id)
-          .maybeSingle();
-      final role =
-          userData?['role']?.toString().trim().toLowerCase() ?? 'student';
+      // Supabase এ password reset email পাঠাও
+      await _supabase.auth.resetPasswordForEmail(_emailController.text.trim());
 
-      if (!mounted) return;
-      if (role == 'admin') {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AdminDashboard()),
-          (route) => false,
-        );
-      } else {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const HomePage()),
-          (route) => false,
-        );
-      }
+      if (mounted) setState(() => _emailSent = true);
     } on AuthApiException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.message), backgroundColor: kRed),
+          SnackBar(
+            content: Text(e.message),
+            backgroundColor: kRed,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } catch (e) {
@@ -65,6 +44,7 @@ class _LoginPageState extends State<LoginPage> {
           const SnackBar(
             content: Text('Something went wrong. Please try again.'),
             backgroundColor: kRed,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -76,7 +56,6 @@ class _LoginPageState extends State<LoginPage> {
   @override
   void dispose() {
     _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
@@ -85,7 +64,12 @@ class _LoginPageState extends State<LoginPage> {
     return Scaffold(
       backgroundColor: Colors.grey.shade100,
       body: SingleChildScrollView(
-        child: Column(children: [_buildHeader(), _buildLoginCard()]),
+        child: Column(
+          children: [
+            _buildHeader(),
+            _emailSent ? _buildSuccessCard() : _buildFormCard(),
+          ],
+        ),
       ),
     );
   }
@@ -107,6 +91,27 @@ class _LoginPageState extends State<LoginPage> {
       padding: const EdgeInsets.fromLTRB(24, 60, 24, 40),
       child: Column(
         children: [
+          // Back button
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.arrow_back_ios_new,
+                  color: Colors.white,
+                  size: 16,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
           Container(
             width: 70,
             height: 70,
@@ -115,14 +120,14 @@ class _LoginPageState extends State<LoginPage> {
               shape: BoxShape.circle,
             ),
             child: const Icon(
-              Icons.local_library,
-              size: 40,
+              Icons.lock_reset_outlined,
+              size: 38,
               color: Colors.white,
             ),
           ),
           const SizedBox(height: 14),
           const Text(
-            'Smart Library',
+            'Forgot Password?',
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -131,19 +136,19 @@ class _LoginPageState extends State<LoginPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Welcome back! Please login to continue.',
-            textAlign: TextAlign.center,
+            'No worries, we\'ll send you reset instructions',
             style: TextStyle(
               color: Colors.white.withOpacity(0.8),
               fontSize: 13,
             ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
     );
   }
 
-  Widget _buildLoginCard() {
+  Widget _buildFormCard() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 30, 20, 20),
       child: Card(
@@ -158,7 +163,7 @@ class _LoginPageState extends State<LoginPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Login',
+                  'Reset Password',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -167,57 +172,28 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Enter your credentials to access your account',
+                  'Enter your registered email address',
                   style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
                 const SizedBox(height: 24),
                 InputField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
-                  label: 'Email',
+                  label: 'Email Address',
                   hint: 'Enter your email',
                   icon: Icons.email_outlined,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Email required' : null,
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Email required';
+                    if (!v.contains('@')) return 'Enter valid email';
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 16),
-                InputField(
-                  controller: _passwordController,
-                  keyboardType: TextInputType.text,
-                  label: 'Password',
-                  hint: 'Enter your password',
-                  icon: Icons.lock_outline,
-                  obscureText: true,
-                  validator: (v) =>
-                      v == null || v.isEmpty ? 'Password required' : null,
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: GestureDetector(
-                    // ForgotPasswordPage এ navigate করো — email input form
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ForgotPasswordPage(),
-                      ),
-                    ),
-                    child: const Text(
-                      'Forgot Password?',
-                      style: TextStyle(
-                        color: kRed,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 26),
                 SizedBox(
                   height: 45,
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
+                    onPressed: _isLoading ? null : _sendResetEmail,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: kRed,
                       shape: RoundedRectangleBorder(
@@ -230,7 +206,7 @@ class _LoginPageState extends State<LoginPage> {
                             strokeWidth: 2,
                           )
                         : const Text(
-                            'Login',
+                            'Send Reset Link',
                             style: TextStyle(
                               fontSize: 16,
                               color: Colors.white,
@@ -241,18 +217,15 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 20),
                 GestureDetector(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const RegisterPage()),
-                  ),
+                  onTap: () => Navigator.pop(context),
                   child: Center(
                     child: RichText(
                       text: const TextSpan(
-                        text: "Don't have an account? ",
+                        text: 'Remember your password? ',
                         style: TextStyle(color: Colors.grey, fontSize: 13),
                         children: [
                           TextSpan(
-                            text: 'Register',
+                            text: 'Login',
                             style: TextStyle(
                               color: kRed,
                               fontWeight: FontWeight.w600,
@@ -266,6 +239,79 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Email পাঠানো সফল হলে success card দেখাও
+  Widget _buildSuccessCard() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 30, 20, 20),
+      child: Card(
+        color: Colors.white,
+        elevation: 6,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        child: Padding(
+          padding: const EdgeInsets.all(30),
+          child: Column(
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: Colors.green.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.mark_email_read_outlined,
+                  size: 38,
+                  color: Colors.green.shade600,
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text(
+                'Check Your Email',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'We\'ve sent a password reset link to\n${_emailController.text.trim()}',
+                style: const TextStyle(
+                  color: Colors.grey,
+                  fontSize: 13,
+                  height: 1.6,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 45,
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kRed,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                  ),
+                  child: const Text(
+                    'Back to Login',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
